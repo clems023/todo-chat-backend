@@ -2,12 +2,20 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\User;
 use App\Models\Project;
-use Illuminate\Http\Request;
+use App\Models\ProjectUser;
+use App\Traits\ApiHttpResponses;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\UserAbilityRequest;
+use App\Http\Requests\StoreProjectRequest;
+use App\Http\Requests\UpdateProjectRequest;
+use Exception;
+use Ramsey\Uuid\Uuid;
 
 class ProjectsController extends Controller
 {
+    use ApiHttpResponses;
     /**
      * @OA\Get(
      *     path="/api/projects",
@@ -51,13 +59,18 @@ class ProjectsController extends Controller
         $user = auth()->user();
 
         // Récupérer tous les projets associés à l'utilisateur
-        $userProjects = $user->projects;
+        $userProjects = ["projects" => $user->projects];
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Projects retrieved successfully',
-            'data' => $userProjects,
-        ], 200);
+        return $this->sendResponse($userProjects, "Projects retrieved successfully", 200);
+    }
+
+    public function getProjectInvitedOn()
+    {
+        $user = auth()->user();
+
+        $results = ["projects" => $user->projectBelongs];
+
+        return $this->sendResponse($results, "Projects retrieved successfully", 200);
     }
 
     /**
@@ -120,25 +133,11 @@ class ProjectsController extends Controller
      */
 
     //Store the projet of a user
-    public function storeUserProject(Request $request)
+    public function storeUserProject(StoreProjectRequest $request)
     {
-
-        $validatedData = $request->validate([
-            'name' => ['required', 'string', 'min:2', 'max:50'],
-            'description' => ['nullable', 'string'],
-        ]);
-
-        $existingProjectName = Project::where('name', $validatedData['name'])->first();
+        $validatedData = $request->all();
 
         try {
-
-            if ($existingProjectName) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Project already exists',
-                    'data' => []
-                ], 400);
-            }
             // Récupérer l'utilisateur connecté
             $user = auth()->user();
 
@@ -146,62 +145,29 @@ class ProjectsController extends Controller
             $project = Project::create([
                 'name' => $validatedData['name'],
                 'description' => $validatedData['description'],
+                'reference' => Uuid::uuid4(),
                 'created_by' => $user->id,
             ]);
 
             // Charger les informations de l'utilisateur associé
             $project->load('createdByUser');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Project created successfully',
-                'data' => $project,
-            ], 201);
+            return $this->sendResponse(["project" => $project], "Project created successfully", 200);
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-                'data' => [],
-            ], 500);
+        } catch (Exception $e) {
+            return $this->sendErrors($e->getMessage(), "Something went wrong", 500);
         }
     }
 
     //Update a project
-    public function updateUserProject(Request $request, $projectId)
+    public function updateUserProject(UpdateProjectRequest $request, Project $project)
     {
-        $validatedData = $request->validate([
-            'name' => ['nullable', 'string', 'min:2', 'max:50'],
-            'description' => ['nullable', 'string'],
-        ]);
+        $validatedData = $request->all();
 
         try {
-
             // Récupérer l'utilisateur connecté
             $user = auth()->user();
 
-            // Récupérer le projet à mettre à jour
-            $project = Project::where('id', $projectId)
-                ->where('created_by', $user->id)
-                ->first();
-
-            if (!$project) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Project not found or you do not have permission to update it',
-                    'data' => [],
-                ], 404);
-            }
-
-            $existingProjectName = Project::where('name', $validatedData['name'])->first();
-
-            if ($existingProjectName) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Project already exists',
-                    'data' => []
-                ], 400);
-            }
             // Mettre à jour sélectivement les informations du projet
             if (isset($validatedData['name'])) {
                 $project->update(['name' => $validatedData['name']]);
@@ -217,57 +183,69 @@ class ProjectsController extends Controller
             // Recharger les informations du projet mis à jour
             $project->load('createdByUser');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Project updated successfully',
-                'data' => $project,
-            ], 200);
+            $results = [
+                'project' => $project
+            ];
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-                'data' => [],
-            ], 500);
+            return $this->sendResponse($results, "Project created successfully", 201);
+        } catch (Exception $e) {
+            return $this->sendErrors($e->getMessage(), "Something went wrong", 500);
         }
     }
 
     // Supprimer un projet de l'utilisateur connecté
-    public function deleteUserProject($projectId)
+    public function deleteUserProject(Project $project)
     {
         try {
             // Récupérer l'utilisateur connecté
             $user = auth()->user();
 
-            // Récupérer le projet à supprimer
-            $project = Project::where('id', $projectId)
-                ->where('created_by', $user->id)
-                ->first();
-
-            if (!$project) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Project not found or you do not have permission to delete it',
-                    'data' => [],
-                ], 404);
+            if ($user->id === $project->created_by) {
+                return $this->sendErrors(null, "Project does not exists or you have not permission to delete it", 404);
             }
 
             // Supprimer le projet
             $project->delete();
+            return $this->sendResponse(["project" => $project], "Project deleted successfully", 204);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Project deleted successfully',
-                'data' => [],
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-                'data' => [],
-            ], 500);
+        } catch (Exception $e) {
+            return $this->sendErrors($e->getMessage(), "Something went wrong", 500);
         }
+    }
+
+    public function updateUserAbility(UserAbilityRequest $request, Project $project)
+    {
+        $validatedData = $request->all();
+        $userToGrant = User::where("email", $validatedData['email'])->first();
+        $user = auth()->user();
+
+        try {
+            if ($user->id === $project->created_by) {
+                if (!$userToGrant) {
+                    return $this->sendErrors([], "User not found", 404);
+                }
+
+                $projectUser = ProjectUser::where('user_id', $userToGrant->id)
+                    ->where('project_id', $project->id)
+                    ->first();
+
+                if (!$projectUser) {
+                    return $this->sendErrors([], "This user is not on your project", 400);
+                }
+
+                $projectUser->update(['ability' => $validatedData["ability"]]);
+
+                return $this->sendResponse([], 'successfully updated', 200);
+
+
+            }
+
+            return $this->sendErrors([], "Access denied", 403);
+        } catch (Exception $e) {
+            return $this->sendErrors($e->getMessage(), "An error occurred while updating the ability of this user to access the project");
+        }
+
+
     }
 
 

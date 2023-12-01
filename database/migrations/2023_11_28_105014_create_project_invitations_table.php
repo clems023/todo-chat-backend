@@ -10,15 +10,13 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
+        Schema::create('project_invitations', function (Blueprint $table) {
             $table->id();
-            $table->string('username');
-            $table->string('country_code');
-            $table->string('phone');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
+            $table->foreignId('project_id')->constrained();
+            $table->foreignId('inviter_user_id')->constrained('users');
+            $table->foreignId('invited_user_id')->constrained('users');
+            $table->boolean('is_active')->default(true);
+            $table->softDeletes();
             $table->timestamps();
         });
     }
@@ -28,6 +26,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        Schema::dropIfExists('project_invitations');
     }
 };

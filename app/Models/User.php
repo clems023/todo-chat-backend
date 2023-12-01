@@ -3,10 +3,11 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
@@ -20,6 +21,8 @@ class User extends Authenticatable
     protected $fillable = [
         'username',
         'email',
+        'country_code',
+        'phone',
         'password',
     ];
 
@@ -29,6 +32,8 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $hidden = [
+        'id',
+        'created_at',
         'updated_at',
         'email_verified_at',
         'password',
@@ -48,5 +53,25 @@ class User extends Authenticatable
     public function projects()
     {
         return $this->hasMany(Project::class, 'created_by');
+    }
+
+    public function projectBelongs()
+    {
+        return $this->belongsToMany(Project::class, 'project_users');
+    }
+
+    public function projectUsers()
+    {
+        return $this->hasMany(ProjectUser::class);
+    }
+
+    /**
+     * Get all of the receivedInvitations for the User
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function receivedInvitations(): HasMany
+    {
+        return $this->hasMany(ProjectInvitation::class, 'invited_user_id');
     }
 }

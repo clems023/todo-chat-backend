@@ -12,7 +12,8 @@ return new class extends Migration {
     {
         Schema::create('projects', function (Blueprint $table) {
             $table->id();
-            $table->string('name', 25)->unique();
+            $table->uuid('reference')->unique();
+            $table->string('name', 50);
             $table->mediumText('description')->nullable();
             $table->unsignedBigInteger('created_by');
             $table->foreign('created_by')->references('id')->on('users');
